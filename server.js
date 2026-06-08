@@ -125,6 +125,7 @@ app.get('/api/audit/:id/export/pdf', async (req, res) => {
     const html = generateHTML(audit.result);
     const browser = await puppeteer.launch({
       headless: 'new',
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     });
     const page = await browser.newPage();
@@ -189,6 +190,7 @@ app.get('/api/audit/:id/export/screenshot', async (req, res) => {
     const html = generateHTML(audit.result);
     const browser = await puppeteer.launch({
       headless: 'new',
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     });
     const page = await browser.newPage();
@@ -212,10 +214,13 @@ app.get('/api/audit/:id/export/screenshot', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n  Website Audit Tool running at http://localhost:${PORT}\n`);
-  // Auto-open browser
-  const opener = process.platform === 'win32' ? 'start' :
-    process.platform === 'darwin' ? 'open' : 'xdg-open';
-  require('child_process').exec(`${opener} http://localhost:${PORT}`);
+  // Auto-open browser only in local development — never on a hosted server
+  const isDev = process.argv.includes('--dev') || process.env.NODE_ENV !== 'production';
+  if (isDev && !process.env.NO_OPEN) {
+    const opener = process.platform === 'win32' ? 'start' :
+      process.platform === 'darwin' ? 'open' : 'xdg-open';
+    require('child_process').exec(`${opener} http://localhost:${PORT}`);
+  }
 });
