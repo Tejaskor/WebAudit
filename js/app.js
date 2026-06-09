@@ -61,15 +61,21 @@ $('#auditForm').addEventListener('submit', async (e) => {
     listenToProgress(id);
 
   } catch (err) {
-    showError(err.message);
+    // A TypeError from fetch means the request never reached the server
+    // (backend down, asleep on a free host, CORS, or wrong API_BASE URL).
+    const unreachable = err instanceof TypeError;
+    showError(unreachable
+      ? 'Could not reach the audit server. Free hosts sleep when idle and take ~30s to wake — please wait a moment and try again. If this persists, the backend may be down or the API URL is misconfigured.'
+      : err.message);
   } finally {
     btn.disabled = false;
     btn.querySelector('.btn-text').textContent = 'Run Audit';
   }
 });
 
-function listenToProgress(auditId) {
+function listenToProgress(auditId, attempt = 0) {
   const source = new EventSource(`${window.API_BASE}/api/audit/${auditId}/progress`);
+  let settled = false; // true once the audit has completed or errored
 
   source.onmessage = (event) => {
     const data = JSON.parse(event.data);
@@ -88,6 +94,7 @@ function listenToProgress(auditId) {
     }
 
     if (data.type === 'complete') {
+      settled = true;
       source.close();
       $('#progressBar').style.width = '100%';
       $('#progressText').textContent = 'Audit complete!';
@@ -95,24 +102,32 @@ function listenToProgress(auditId) {
     }
 
     if (data.type === 'error') {
+      settled = true;
       source.close();
       showError(data.message);
     }
   };
 
   source.onerror = () => {
+    if (settled) return; // normal close after completion — ignore
     source.close();
-    // Try to fetch the result directly
+    // The SSE stream dropped (backend restart, idle timeout, or never connected).
+    // Try to fetch the finished report directly; if that also fails, surface a
+    // clear error instead of leaving the user stuck on the progress screen.
     setTimeout(async () => {
+      if (settled) return;
       try {
         const res = await fetch(`${window.API_BASE}/api/audit/${auditId}/report`);
         if (res.ok) {
-          const result = await res.json();
-          showReport(result);
+          settled = true;
+          return showReport(await res.json());
         }
-      } catch {
-        // Already showing progress, will resolve
-      }
+        if (res.status === 202 && attempt < 5) {
+          // Still running but we lost the live stream — reconnect (capped).
+          return listenToProgress(auditId, attempt + 1);
+        }
+      } catch { /* fall through to error below */ }
+      showError('Lost the connection to the audit server. It may be restarting or temporarily down — please try again in a moment.');
     }, 2000);
   };
 }

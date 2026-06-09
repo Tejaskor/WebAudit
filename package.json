@@ -1,0 +1,10 @@
+{
+  "name": "website-audit-frontend",
+  "version": "1.0.0",
+  "description": "Website Audit Tool — static vanilla-JS frontend (deployed to GitHub Pages)",
+  "private": true,
+  "homepage": "https://tejaskor.github.io/WebAudit/",
+  "scripts": {
+    "build": "echo \"Static front-end — no build step. This folder is published to GitHub Pages as-is.\""
+  }
+}
